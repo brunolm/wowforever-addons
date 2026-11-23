@@ -45,6 +45,7 @@ Click a quest name. The window shows the quests before it (prerequisites and bre
 ## Commands
 - `/pq` or `/partyquests`: open or close the window.
 - `/pq sync`: ask the party for their quest logs again (the **Sync** button does the same).
+- `/pq debug`: print the sync status: group channel, messages sent and dropped (with the game's error), what arrived from whom, and each party member's data source. If sync doesn't work, both sides run it and compare.
 
 ## How it syncs
 Party data goes over hidden addon messages to your party, or your subgroup in a raid. When you join a group or open the window, the addon asks for everyone's quest log and completed quests. Your client sends updates when your quest log changes or you turn a quest in. Questie's data has no update event, so the open window refreshes every 5 seconds. Messages wait in a queue when the game throttles or blocks addon messages, for example in combat in an instance. Sharing a quest is blocked in combat.

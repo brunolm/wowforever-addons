@@ -11,6 +11,11 @@ local questCache, requestedTitles, pending = {}, {}, {}
 local ownLog, ownCompleted
 local UnitNames, Unknown
 
+-- Unit queries can return secret values on this client; those are treated as unknown.
+local function Readable(value)
+  return value ~= nil and not (issecretvalue and issecretvalue(value))
+end
+
 local events = CreateFrame("Frame")
 for _, event in ipairs({ "PLAYER_LOGIN", "GROUP_ROSTER_UPDATE", "QUEST_LOG_UPDATE", "QUEST_TURNED_IN",
   "QUEST_DATA_LOAD_RESULT", "UNIT_LEVEL", "PLAYER_REGEN_DISABLED", "PLAYER_REGEN_ENABLED" }) do
@@ -34,12 +39,34 @@ end)
 SLASH_PARTYQUESTS1 = "/pq"
 SLASH_PARTYQUESTS2 = "/partyquests"
 SlashCmdList.PARTYQUESTS = function(msg)
-  if strtrim(msg or ""):lower() == "sync" then
+  local command = strtrim(msg or ""):lower()
+  if command == "sync" then
     ns.Comm.Hello(true)
     print("PartyQuests: asked the party for their quest logs.")
     return
   end
+  if command == "debug" then
+    ns.PrintDebug()
+    return
+  end
   ns.UI.Toggle()
+end
+
+function ns.PrintDebug()
+  local metadata = C_AddOns and C_AddOns.GetAddOnMetadata or GetAddOnMetadata
+  print("PartyQuests " .. (metadata("PartyQuests", "Version") or "?") .. " sync status:")
+  for _, line in ipairs(ns.Comm.DebugLines()) do print(line) end
+  for i = 1, GetNumSubgroupMembers() do
+    local unit = "party" .. i
+    local guid, name = UnitGUID(unit), UnitName(unit)
+    local m = ns.Member(unit)
+    local data = "not shown (unreadable GUID)"
+    if m then
+      local completed = m.completed and #ns.SortedKeys(m.completed) or "unknown"
+      data = ("source %s, %d in log, completed %s"):format(tostring(m.source or "none"), #ns.SortedKeys(m.active), completed)
+    end
+    print(("  %s: %s, %s"):format(unit, Readable(name) and name or "?", Readable(guid) and (guid .. "; " .. data) or data))
+  end
 end
 
 --- Runs `fn` once, `delay` seconds after the last call with the same key.
@@ -68,11 +95,6 @@ function ns.Members()
     end
   end
   return list
-end
-
--- Unit queries can return secret values on this client; those are treated as unknown.
-local function Readable(value)
-  return value ~= nil and not (issecretvalue and issecretvalue(value))
 end
 
 function ns.Member(unit, isSelf)

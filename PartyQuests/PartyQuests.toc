@@ -2,7 +2,7 @@
 ## Title: PartyQuests
 ## Notes: Compare quests with your party: who has which quest, what you can share with them, and quest chains. /pq
 ## Author: brunolm
-## Version: 1.0.0
+## Version: 1.0.1
 ## OptionalDeps: QuestieDB, Questie
 Core.lua
 Tooltip.lua

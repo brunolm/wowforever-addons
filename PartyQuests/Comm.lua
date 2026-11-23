@@ -25,18 +25,33 @@ local CHUNK = 230
 local MAX_TOKENS = 8
 local HELLO_COOLDOWN = 10
 
+local SendResult = Enum.SendAddonMessageResult or {
+  Success = 0, AddonMessageThrottle = 3, ChannelThrottle = 8, AddOnMessageLockdown = 11,
+}
+-- Results that mean "try again later"; any other failure drops the message so it can't block the queue.
+local RETRY = {
+  [SendResult.AddonMessageThrottle or 3] = true,
+  [SendResult.ChannelThrottle or 8] = true,
+  [SendResult.AddOnMessageLockdown or 11] = true,
+}
+
 local queue, incoming, senderGuid = {}, {}, {}
 local tokens, seq, lastHello, lastActive = MAX_TOKENS, 0, 0, nil
 local nonce = tostring(math.random(100000, 999999))
+local stats = { sent = 0, dropped = 0, received = {}, parsed = {} }
 
-local Pump, SendPayload, ActivePart, OnMessage, OnChunk, Parse
+local Pump, SendPayload, Chunks, ActivePart, Send, OnMessage, OnChunk, Parse, ResultName
 
 function Comm.Init()
   C_ChatInfo.RegisterAddonMessagePrefix(PREFIX)
   local listener = CreateFrame("Frame")
   listener:RegisterEvent("CHAT_MSG_ADDON")
   listener:SetScript("OnEvent", function(_, _, prefix, text, channel, sender)
-    if prefix == PREFIX and (channel == "PARTY" or channel == "RAID") then OnMessage(text, sender) end
+    if prefix ~= PREFIX then return end
+    local count = stats.received[sender] or { messages = 0 }
+    count.messages, count.channel, count.at = count.messages + 1, channel, GetTime()
+    stats.received[sender] = count
+    if channel == "PARTY" or channel == "RAID" then OnMessage(text, sender) end
   end)
   -- Addon messages are rate limited per prefix; refill a small burst allowance about once a second.
   C_Timer.NewTicker(0.25, function()
@@ -120,12 +135,28 @@ function SendPayload(kind)
     if queue[i]:sub(1, 1) == kind then table.remove(queue, i) end
   end
   seq = (seq + 1) % 1296
-  local total = math.ceil(#payload / CHUNK)
-  for i = 1, total do
-    queue[#queue + 1] = ("%s%s:%s:%s:%s"):format(kind, Comm.B36(seq), Comm.B36(total), Comm.B36(i),
-      payload:sub((i - 1) * CHUNK + 1, i * CHUNK))
+  local chunks = Chunks(payload)
+  for i, chunk in ipairs(chunks) do
+    queue[#queue + 1] = ("%s%s:%s:%s:%s"):format(kind, Comm.B36(seq), Comm.B36(#chunks), Comm.B36(i), chunk)
   end
   Pump()
+end
+
+-- Splits on UTF-8 character boundaries, so no message carries half a character (accented zone names
+-- on non-English clients).
+function Chunks(payload)
+  local chunks, first = {}, 1
+  while first <= #payload do
+    local last = math.min(first + CHUNK - 1, #payload)
+    while last < #payload and last > first do
+      local nextByte = payload:byte(last + 1)
+      if nextByte < 0x80 or nextByte > 0xBF then break end
+      last = last - 1
+    end
+    chunks[#chunks + 1] = payload:sub(first, last)
+    first = last + 1
+  end
+  return chunks
 end
 
 function ActivePart()
@@ -145,21 +176,43 @@ end
 -- Sends queued messages while the burst allowance lasts; a throttled or restricted send stays queued.
 function Pump()
   while #queue > 0 and tokens >= 1 do
-    local channel = IsInRaid() and "RAID" or IsInGroup() and "PARTY"
+    local channel = Comm.Channel()
     if not channel then
       wipe(queue)
       return
     end
     if C_ChatInfo.AreOutgoingAddonChatMessagesRestricted and C_ChatInfo.AreOutgoingAddonChatMessagesRestricted() then return end
-    local ok, first, second = pcall(C_ChatInfo.SendAddonMessage, PREFIX, queue[1], channel)
-    local result = second ~= nil and second or first
-    if not ok or result == false or (type(result) == "number" and result ~= 0) then
+    local result = Send(queue[1], channel)
+    stats.lastResult = result
+    if RETRY[result] then
       tokens = 0
       return
     end
     table.remove(queue, 1)
     tokens = tokens - 1
+    if result == SendResult.Success then
+      stats.sent = stats.sent + 1
+    else
+      stats.dropped = stats.dropped + 1
+      stats.lastError = ResultName(result)
+    end
   end
+end
+
+function Comm.Channel()
+  return IsInRaid() and "RAID" or IsInGroup() and "PARTY" or nil
+end
+
+-- The send result as an Enum.SendAddonMessageResult code; older clients return a boolean or nothing.
+function Send(text, channel)
+  local ok, result = pcall(C_ChatInfo.SendAddonMessage, PREFIX, text, channel)
+  if not ok then
+    stats.lastLuaError = tostring(result)
+    return SendResult.GeneralError or 9
+  end
+  if result == nil or result == true then return SendResult.Success end
+  if result == false then return SendResult.GeneralError or 9 end
+  return result
 end
 
 function OnMessage(text, sender)
@@ -202,6 +255,7 @@ end
 function Parse(kind, payload, sender)
   local version, guid, headers, active, completed = strsplit(";", payload)
   if version ~= VERSION or not guid or guid == "" or guid == UnitGUID("player") then return end
+  stats.parsed[sender] = { guid = guid, kind = kind, at = GetTime() }
   senderGuid[sender] = guid
   local zoneNames = headers ~= "" and { strsplit("^", headers) } or {}
   local entry = ns.remote[guid] or {}
@@ -219,4 +273,32 @@ function Parse(kind, payload, sender)
   entry.updated = time()
   ns.remote[guid] = entry
   ns.Changed()
+end
+
+--- Lines describing the sync state, for /pq debug.
+function Comm.DebugLines()
+  local lines = {}
+  local function add(format, ...) lines[#lines + 1] = "  " .. format:format(...) end
+  local restricted = C_ChatInfo.AreOutgoingAddonChatMessagesRestricted and C_ChatInfo.AreOutgoingAddonChatMessagesRestricted()
+  local registered = C_ChatInfo.IsAddonMessagePrefixRegistered and C_ChatInfo.IsAddonMessagePrefixRegistered(PREFIX)
+  add("channel %s, %d other member(s), prefix registered: %s, sending restricted: %s",
+    tostring(Comm.Channel() or "none (not in a group)"), GetNumSubgroupMembers(), tostring(registered), tostring(restricted))
+  add("sent %d, dropped %d, queued %d, last result %s%s", stats.sent, stats.dropped, #queue,
+    stats.lastResult and ResultName(stats.lastResult) or "none",
+    stats.lastError and (", last error " .. stats.lastError) or "")
+  if stats.lastLuaError then add("send error: %s", stats.lastLuaError) end
+  if not next(stats.received) then add("received nothing from anyone yet") end
+  for sender, count in pairs(stats.received) do
+    local parsed = stats.parsed[sender]
+    add("from %s: %d message(s) on %s, %ds ago; %s", sender, count.messages, tostring(count.channel),
+      math.floor(GetTime() - count.at), parsed and ("full data from " .. parsed.guid) or "no complete data yet")
+  end
+  return lines
+end
+
+function ResultName(result)
+  for name, value in pairs(SendResult) do
+    if value == result then return ("%s (%s)"):format(name, tostring(result)) end
+  end
+  return tostring(result)
 end
