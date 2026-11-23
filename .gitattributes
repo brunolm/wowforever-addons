@@ -1,0 +1,5 @@
+* text=auto
+*.lua text
+*.toc text
+*.xml text
+*.md text

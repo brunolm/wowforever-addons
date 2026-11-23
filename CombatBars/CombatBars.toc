@@ -1,0 +1,4 @@
+## Interface: 16001
+## Title: CombatBars
+## Notes: Shows action bars 1 and 2 only in combat (or in a vehicle / override bar). /combatbars toggles.
+CombatBars.lua

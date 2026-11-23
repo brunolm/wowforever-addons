@@ -1,0 +1,4 @@
+## Interface: 16001
+## Title: OneKeyFishing
+## Notes: While Fishing is channeling, the fishing key interacts with the bobber instead of recasting.
+OneKeyFishing.lua

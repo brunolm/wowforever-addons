@@ -1,0 +1,5 @@
+## Interface: 16001
+## Title: QuestItemGuide
+## Notes: Lists usable quest items in your bags and sets a TomTom waypoint where to use them. /qig
+## Dependencies: Questie, TomTom
+QuestItemGuide.lua

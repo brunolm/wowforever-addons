@@ -1,0 +1,12 @@
+## Interface: 16001
+## Title: OreMap
+## Notes: /ore toggles every ore node of your current zone on the world map (Wowhead Forever spawn data). Turns itself off when you leave the zone.
+## Version: 1.0.0
+
+libs\LibStub\LibStub.lua
+libs\CallbackHandler-1.0\CallbackHandler-1.0.xml
+libs\HereBeDragons\HereBeDragons-2.0.lua
+libs\HereBeDragons\HereBeDragons-Pins-2.0.lua
+
+Data.lua
+OreMap.lua

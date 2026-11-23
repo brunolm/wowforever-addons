@@ -1,0 +1,8 @@
+## Interface: 16001
+## Title: PocketWatch
+## Notes: A small stopwatch box. Left-click start/pause, right-click reset, drag to move. /pw, /pw options
+## Version: 1.1.0
+## SavedVariables: PocketWatchDB
+
+PocketWatch.lua
+Options.lua

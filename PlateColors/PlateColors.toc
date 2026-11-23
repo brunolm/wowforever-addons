@@ -1,0 +1,8 @@
+## Interface: 16001
+## Title: PlateColors
+## Notes: Recolors nameplate health bars by unit type (party, raid, guild, target...). Nothing else about the nameplates changes. /platecolors
+## Version: 1.0.0
+## SavedVariables: PlateColorsDB
+
+Core.lua
+Options.lua
