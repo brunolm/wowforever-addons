@@ -28,7 +28,7 @@ Each folder has a README with the details.
 3. Restart the game, or type `/reload` if it's already running and you only updated an addon.
 4. On the character select screen, open **AddOns** and check that they're enabled. If one says "Out of date", tick **Load out of date AddOns**.
 
-QuestItemGuide also needs [Questie](https://www.curseforge.com/wow/addons/questie) and [TomTom](https://www.curseforge.com/wow/addons/tomtom). PartyQuests uses QuestieDB (installed with Questie) when it's there, Party members who also run PartyQuests share their completed quests too; for the others it falls back to Questie's party sync.
+QuestItemGuide also needs [Questie](https://www.curseforge.com/wow/addons/questie) and [TomTom](https://www.curseforge.com/wow/addons/tomtom). PartyQuests uses QuestieDB (installed with Questie) when it's there. Party members who also run PartyQuests share their completed quests too; for the others it falls back to Questie's party sync.
 
 ### Updating
 Replace the addon folder with the new one and `/reload`. Settings are stored by the game in the `WTF` folder, so they're kept.
