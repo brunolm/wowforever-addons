@@ -7,6 +7,7 @@ Small addons for **World of Warcraft: Forever**. Each one does a single job.
 | [CombatBars](CombatBars) | Shows action bars 1 and 2 only in combat | `/combatbars` |
 | [OneKeyFishing](OneKeyFishing) | One key casts Fishing and reels in the catch | none (key **F**) |
 | [OreMap](OreMap) | Shows every ore node of your zone on the world map | `/ore` |
+| [PartyQuests](PartyQuests) | Compares quests with your party, shows which of yours you can share with whom, and quest chains. Uses Questie's party data for members without it; QuestieDB optional | `/pq` |
 | [PlateColors](PlateColors) | Colors nameplate health bars by unit type (party, raid, guild…) | `/pcolors` |
 | [PocketWatch](PocketWatch) | A small stopwatch box | `/pw` |
 | [QuestItemGuide](QuestItemGuide) | Lists the quest items in your bags and where to take them. Needs Questie and TomTom | `/qig` |
@@ -27,7 +28,7 @@ Each folder has a README with the details.
 3. Restart the game, or type `/reload` if it's already running and you only updated an addon.
 4. On the character select screen, open **AddOns** and check that they're enabled. If one says "Out of date", tick **Load out of date AddOns**.
 
-QuestItemGuide also needs [Questie](https://www.curseforge.com/wow/addons/questie) and [TomTom](https://www.curseforge.com/wow/addons/tomtom).
+QuestItemGuide also needs [Questie](https://www.curseforge.com/wow/addons/questie) and [TomTom](https://www.curseforge.com/wow/addons/tomtom). PartyQuests uses QuestieDB (installed with Questie) when it's there, Party members who also run PartyQuests share their completed quests too; for the others it falls back to Questie's party sync.
 
 ### Updating
 Replace the addon folder with the new one and `/reload`. Settings are stored by the game in the `WTF` folder, so they're kept.
@@ -50,8 +51,8 @@ Install WoW Forever addons from https://github.com/brunolm/wowforever-addons.
    If it isn't there, look for a "_forever_" folder inside the World of Warcraft
    install folder and ask me before guessing.
 2. Download or clone the repository into a temporary folder.
-3. Ask me which addons I want: CombatBars, OneKeyFishing, OreMap, PlateColors,
-   PocketWatch, QuestItemGuide (or all of them).
+3. Ask me which addons I want: CombatBars, OneKeyFishing, OreMap, PartyQuests,
+   PlateColors, PocketWatch, QuestItemGuide (or all of them).
 4. For each one, copy the whole folder so the result is
    AddOns\<Name>\<Name>.toc. If AddOns\<Name> already exists, show me and ask
    before replacing it.
