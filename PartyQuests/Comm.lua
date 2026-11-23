@@ -174,6 +174,8 @@ function ActivePart()
 end
 
 -- Sends queued messages while the burst allowance lasts; a throttled or restricted send stays queued.
+-- AreOutgoingAddonChatMessagesRestricted() reports true on Forever while party messages still go
+-- through, so only the send result decides.
 function Pump()
   while #queue > 0 and tokens >= 1 do
     local channel = Comm.Channel()
@@ -181,7 +183,6 @@ function Pump()
       wipe(queue)
       return
     end
-    if C_ChatInfo.AreOutgoingAddonChatMessagesRestricted and C_ChatInfo.AreOutgoingAddonChatMessagesRestricted() then return end
     local result = Send(queue[1], channel)
     stats.lastResult = result
     if RETRY[result] then
