@@ -11,19 +11,23 @@ local LIST_TOP, LIST_BOTTOM = 84, 40
 local POOL = math.ceil((HEIGHT - LIST_TOP - LIST_BOTTOM) / ROW_H) + 1
 local MAX_COLUMNS = 5
 local ZONE_ROWS = 16
+local TAB_W = 116
 local TABS = {
   { key = "share", label = "Share from me" },
   { key = "active", label = "In progress" },
-  { key = "done", label = "Completed" },
+  { key = "done", label = "Party completed" },
+  { key = "mine", label = "My completed" },
 }
 
-local state = { tab = "share", zone = nil, shareOnly = false, query = "" }
+-- `levels` is { min, max } when the search text is a level ("25") or a range ("20-25").
+local state = { tab = "share", zone = nil, shareOnly = false, query = "", levels = nil }
 local frame, scroll, content, header, emptyText, statusText, shareAllButton, zoneButton, zonePopup
 local tabButtons, rowPool, list, columns, zones, shareable = {}, {}, {}, {}, {}, {}
 
 local Build, BuildToolbar, BuildHeader, BuildList, BuildFooter, BuildZonePopup
-local Collect, CollectIds, MakeRows, Filter, Render, RenderVisible, FillHeader, CreateRow, FillRow, CellX
-local ShowZonePopup, UpdateStatus, ShareAll, ShareTip, Tooltip, RowButton
+local Collect, CollectIds, MergeByName, MakeRows, CompletedCount, Filter, Matches, Render, RenderVisible, FillHeader
+local CreateRow, FillRow, CellX, ShowZonePopup, UpdateStatus, ShareAll, RowButton, ParseLevels
+local Tooltip = ns.Tooltip
 
 function UI.Toggle()
   Build()
@@ -83,8 +87,8 @@ end
 function BuildToolbar()
   for i, tab in ipairs(TABS) do
     local button = CreateFrame("Button", nil, frame, "UIPanelButtonTemplate")
-    button:SetSize(104, 22)
-    button:SetPoint("TOPLEFT", 12 + (i - 1) * 108, -30)
+    button:SetSize(TAB_W - 4, 22)
+    button:SetPoint("TOPLEFT", 12 + (i - 1) * TAB_W, -30)
     button:SetText(tab.label)
     button:SetScript("OnClick", function()
       state.tab, state.zone = tab.key, nil
@@ -95,8 +99,8 @@ function BuildToolbar()
   end
 
   zoneButton = CreateFrame("Button", nil, frame, "UIPanelButtonTemplate")
-  zoneButton:SetSize(180, 22)
-  zoneButton:SetPoint("TOPLEFT", 12 + #TABS * 108 + 8, -30)
+  zoneButton:SetSize(170, 22)
+  zoneButton:SetPoint("TOPLEFT", 12 + #TABS * TAB_W + 4, -30)
   zoneButton:SetScript("OnClick", function() ShowZonePopup(not zonePopup:IsShown()) end)
 
   local check = CreateFrame("CheckButton", nil, frame, "UICheckButtonTemplate")
@@ -108,17 +112,30 @@ function BuildToolbar()
   end)
   check.label = check:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
   check.label:SetPoint("LEFT", check, "RIGHT", 2, 0)
-  check.label:SetText("Only quests I can share")
+  check.label:SetText("Only sharable")
   frame.shareOnly = check
 
   -- The template's own OnTextChanged shows its hint text and clear button, so hook it rather than replace it.
   local search = CreateFrame("EditBox", nil, frame, "SearchBoxTemplate")
-  search:SetSize(160, 20)
+  search:SetSize(150, 20)
   search:SetPoint("TOPRIGHT", -16, -31)
+  if type(search.Instructions) == "table" then search.Instructions:SetText("Name, zone or level") end
   search:HookScript("OnTextChanged", function(self)
     state.query = strtrim(self:GetText()):lower()
+    state.levels = ParseLevels(state.query)
     UI.Refresh()
   end)
+  search:HookScript("OnEnter", function(self)
+    Tooltip(self, "Search", "Matches quest or zone names. A number matches the quest level: 25, or a range like 20-25.")
+  end)
+  search:HookScript("OnLeave", GameTooltip_Hide)
+end
+
+function ParseLevels(query)
+  local low, high = query:match("^(%d+)%s*%-%s*(%d+)$")
+  if low then return { math.min(tonumber(low), tonumber(high)), math.max(tonumber(low), tonumber(high)) } end
+  local level = tonumber(query:match("^(%d+)$") or "")
+  return level and { level, level } or nil
 end
 
 function BuildHeader()
@@ -246,7 +263,7 @@ end
 -- Builds `columns` (the members shown), `zones` (for the picker) and `list` (zone headers and quest rows).
 function Collect()
   local members = ns.Members()
-  if state.tab == "share" then
+  if state.tab == "share" or state.tab == "mine" then
     columns = {}
     for i = 2, #members do columns[#columns + 1] = members[i] end
   else
@@ -272,33 +289,38 @@ function CollectIds(members)
       for id in pairs(m.active) do all[id] = true end
     end
     for _, id in ipairs(ns.SortedKeys(all)) do groups[#groups + 1] = { id } end
+  elseif state.tab == "mine" then
+    groups = MergeByName({ members[1] })
   else
     local known = {}
     for _, m in ipairs(columns) do
       if m.completed then known[#known + 1] = m end
     end
     if #known < 2 then return groups end
-    local byName, order = {}, {}
-    for _, m in ipairs(known) do
-      for id in pairs(m.completed) do
-        local name = ns.QuestTitle(id)
-        if not byName[name] then
-          byName[name] = {}
-          order[#order + 1] = name
-        end
-        if not tContains(byName[name], id) then table.insert(byName[name], id) end
-      end
-    end
-    for _, name in ipairs(order) do
-      local ids, everyone = byName[name], true
-      for _, m in ipairs(known) do
-        local has = false
-        for _, id in ipairs(ids) do has = has or m.completed[id] == true end
-        everyone = everyone and has
-      end
+    for _, ids in ipairs(MergeByName(known)) do
+      local everyone = true
+      for _, m in ipairs(known) do everyone = everyone and CompletedCount(m, ids) > 0 end
       if not everyone then groups[#groups + 1] = ids end
     end
   end
+  return groups
+end
+
+-- The members' completed quest IDs grouped by quest name.
+function MergeByName(members)
+  local byName, order = {}, {}
+  for _, m in ipairs(members) do
+    for id in pairs(m.completed or {}) do
+      local name = ns.QuestTitle(id)
+      if not byName[name] then
+        byName[name] = {}
+        order[#order + 1] = name
+      end
+      if not tContains(byName[name], id) then table.insert(byName[name], id) end
+    end
+  end
+  local groups = {}
+  for i, name in ipairs(order) do groups[i] = byName[name] end
   return groups
 end
 
@@ -307,6 +329,10 @@ function MakeRows(groups, members)
   for _, ids in ipairs(groups) do
     local id = ids[1]
     local row = { ids = ids, id = id, name = ns.QuestTitle(id), zone = ns.QuestZone(id, members), cells = {} }
+    if state.tab == "mine" then
+      local times = CompletedCount(members[1], ids)
+      row.label = times > 1 and ("%s |cff808080x%d|r"):format(row.name, times) or row.name
+    end
     for i, m in ipairs(columns) do
       local cell
       if state.tab == "share" then
@@ -316,15 +342,10 @@ function MakeRows(groups, members)
         cell = ns.Status(id, m)
         if cell.kind == "ok" then cell = { kind = "neutral", text = cell.text, tip = cell.tip } end
       else
-        local count = 0
-        for _, qid in ipairs(ids) do
-          if m.completed[qid] then count = count + 1 end
-        end
+        local count = CompletedCount(m, ids)
         if count > 0 then
           cell = { kind = "done", text = count > 1 and ("done x" .. count) or "done" }
-        elseif ns.OnQuest(m, id) then
-          cell = { kind = "has", text = "in log" }
-        elseif m.completed then
+        elseif state.tab == "done" and m.completed and not ns.OnQuest(m, id) then
           cell = { kind = "unknown", text = "-" }
         else
           cell = ns.Status(id, m)
@@ -337,12 +358,19 @@ function MakeRows(groups, members)
   return rows
 end
 
--- Applies the zone, text and share-only filters, sorts by zone then name, and inserts zone headers.
+function CompletedCount(m, ids)
+  local count = 0
+  for _, id in ipairs(ids) do
+    if m.completed and m.completed[id] then count = count + 1 end
+  end
+  return count
+end
+
+-- Applies the zone, search and share-only filters, sorts by zone then name, and inserts zone headers.
 function Filter(rows)
   local kept = {}
   for _, row in ipairs(rows) do
-    local matches = state.query == "" or row.name:lower():find(state.query, 1, true) or row.zone:lower():find(state.query, 1, true)
-    if matches and (not state.zone or row.zone == state.zone) and not (state.shareOnly and state.tab == "share" and not row.canShare) then
+    if Matches(row) and (not state.zone or row.zone == state.zone) and not (state.shareOnly and state.tab == "share" and not row.canShare) then
       kept[#kept + 1] = row
     end
   end
@@ -359,6 +387,15 @@ function Filter(rows)
     out[#out + 1] = row
   end
   return out
+end
+
+-- A level search matches the quest level (QuestieDB); anything else matches quest or zone names.
+function Matches(row)
+  if state.levels then
+    local q = ns.QuestData(row.id)
+    return q ~= nil and q.lvl >= state.levels[1] and q.lvl <= state.levels[2]
+  end
+  return state.query == "" or row.name:lower():find(state.query, 1, true) or row.zone:lower():find(state.query, 1, true)
 end
 
 function Render()
@@ -389,6 +426,8 @@ function Render()
     end
     if state.tab == "done" and known < 2 then
       emptyText:SetText("Completed quests need a party member with PartyQuests. Questie doesn't share completed quests.")
+    elseif state.tab == "mine" and not next(ns.OwnCompleted()) then
+      emptyText:SetText("No completed quests yet.")
     elseif state.tab == "share" and not IsInGroup() then
       emptyText:SetText("Join a party to compare quests. Quest names still open their chain.")
     else
@@ -472,14 +511,9 @@ function CreateRow()
     row.cells[i] = cell
   end
 
-  row.share = RowButton(row, "Share", 0, ns.ShareQuest, function(self) return "Share with the party", ShareTip(self.questID) end)
-  row.track = RowButton(row, "Track", 1, ns.TrackQuest, function()
-    if not ns.CanTrack() then return "Track", "Needs the TomTom addon." end
-    return "Track", "TomTom's arrow points to the nearest objective, the turn-in once the quest is complete, or the quest giver for quests you don't have."
-  end)
-  row.map = RowButton(row, "Map", 2, ns.ShowQuestOnMap, function()
-    return "Show on map", "Opens the world map where the quest takes you."
-  end)
+  row.share = RowButton(row, "Share", 0, ns.ShareQuest, ns.ShareButtonTip)
+  row.track = RowButton(row, "Track", 1, ns.TrackQuest, ns.TrackButtonTip)
+  row.map = RowButton(row, "Map", 2, ns.ShowQuestOnMap, ns.MapButtonTip)
   return row
 end
 
@@ -515,7 +549,7 @@ function FillRow(row, item, index)
     return
   end
   row.name.questID = item.id
-  row.name.text:SetText(item.name)
+  row.name.text:SetText(item.label or item.name)
   row.level:SetText(ns.LevelText(item.id))
   local sharable = ns.IsSharable(item.id)
   row.sharable:SetText(sharable == nil and "|cff808080?|r" or sharable and "|cff1eff00yes|r" or "|cff808080no|r")
@@ -531,7 +565,7 @@ function FillRow(row, item, index)
   end
   local actions = state.tab == "share"
   row.share:SetShown(actions and sharable ~= false)
-  row.share:SetEnabled(IsInGroup() and not InCombatLockdown())
+  row.share:SetEnabled(ns.CanShare(item.id))
   row.track:SetShown(actions)
   row.track:SetEnabled(ns.CanTrack())
   row.map:SetShown(actions)
@@ -566,25 +600,4 @@ function ShareAll()
     end
     ns.ShareQuest(ids[i])
   end, #ids)
-end
-
--- Why the Share button is disabled, or who in the party can take the quest.
-function ShareTip(questID)
-  if not IsInGroup() then return "Join a party to share quests." end
-  if InCombatLockdown() then return "Quests can't be shared in combat." end
-  local lines = {}
-  for i, m in ipairs(ns.Members()) do
-    if i > 1 then
-      local status = ns.ShareStatus(questID, m)
-      lines[#lines + 1] = ("|c%s%s|r: %s"):format(ns.ClassColor(m), m.name, ns.Colorize(status))
-    end
-  end
-  return table.concat(lines, "\n")
-end
-
-function Tooltip(owner, title, text)
-  GameTooltip:SetOwner(owner, "ANCHOR_RIGHT")
-  GameTooltip:SetText(title or "", 1, 1, 1, 1, true)
-  if text then GameTooltip:AddLine(text, nil, nil, nil, true) end
-  GameTooltip:Show()
 end

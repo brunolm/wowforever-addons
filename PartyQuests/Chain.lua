@@ -10,10 +10,10 @@ local DEPTH, MAX_NODES = 15, 40
 local CONTENT_W = WIDTH - 60
 
 local frame, scroll, content, info
-local forButtons, nodePool, linePool, labelPool = {}, {}, {}, {}
+local forButtons, actionButtons, nodePool, linePool, labelPool = {}, {}, {}, {}, {}
 local links, questID, forGuid
 
-local Build, Links, Walk, Rows, Render, PlaceRow, Node, Line, Label, InfoText
+local Build, ActionButton, Links, Walk, Rows, Render, UpdateActions, PlaceRow, Node, Line, Label, InfoText
 
 --- Opens the chain window on a quest. Needs QuestieDB for prerequisites and follow-ups.
 function Chain.Open(id)
@@ -62,8 +62,11 @@ function Build()
     end)
     forButtons[i] = button
   end
+  actionButtons.map = ActionButton("Map", 0, ns.ShowQuestOnMap, ns.MapButtonTip)
+  actionButtons.track = ActionButton("Track", 1, ns.TrackQuest, ns.TrackButtonTip)
+  actionButtons.share = ActionButton("Share", 2, ns.ShareQuest, ns.ShareButtonTip)
 
-  info = frame:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
+  info =frame:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
   info:SetPoint("TOPLEFT", 16, -60)
   info:SetWidth(WIDTH - 32)
   info:SetJustifyH("LEFT")
@@ -75,6 +78,22 @@ function Build()
   content = CreateFrame("Frame", nil, scroll)
   content:SetSize(CONTENT_W, 1)
   scroll:SetScrollChild(content)
+end
+
+--- A button for the quest at the center of the chain, on the For row; `slot` counts from the right.
+function ActionButton(text, slot, onClick, tip)
+  local button = CreateFrame("Button", nil, frame, "UIPanelButtonTemplate")
+  button:SetSize(70, 20)
+  button:SetPoint("TOPRIGHT", -16 - slot * 74, -30)
+  button:SetText(text)
+  button:SetMotionScriptsWhileDisabled(true)
+  button:SetScript("OnClick", function() onClick(questID) end)
+  button:SetScript("OnEnter", function(self)
+    self.questID = questID
+    ns.Tooltip(self, tip(self))
+  end)
+  button:SetScript("OnLeave", GameTooltip_Hide)
+  return button
 end
 
 function Render()
@@ -96,7 +115,8 @@ function Render()
 
   frame.title:SetText(("%s  |cffaaaaaa%s · level %s · #%d|r"):format(ns.QuestTitle(questID), ns.QuestZone(questID, members),
     ns.LevelText(questID), questID))
-  info:SetText(InfoText(questID, m))
+  UpdateActions()
+  info:SetText(InfoText(questID, m, members))
   scroll:ClearAllPoints()
   scroll:SetPoint("TOPLEFT", 12, -(68 + info:GetStringHeight() + 10))
   scroll:SetPoint("BOTTOMRIGHT", -32, 12)
@@ -116,6 +136,11 @@ function Render()
   content:SetHeight(y + 10)
   scroll:SetVerticalScroll(0)
   scroll:UpdateScrollChildRect()
+end
+
+function UpdateActions()
+  actionButtons.share:SetEnabled(ns.CanShare(questID))
+  actionButtons.track:SetEnabled(ns.CanTrack())
 end
 
 --- Links between all QuestieDB quests, built once: prerequisites, nextQuestInChain and breadcrumbs.
@@ -276,13 +301,24 @@ function Label(y, text, inline)
   return y + LABEL_H
 end
 
-function InfoText(id, m)
+function InfoText(id, m, members)
   local q = ns.QuestData(id)
   local sharable = ns.IsSharable(id)
   local lines = {
     ("|c%s%s|r: %s   %s"):format(ns.ClassColor(m), m.name, ns.Colorize(ns.Status(id, m)),
       sharable == nil and "sharable?" or sharable and "|cff1eff00sharable|r" or "not sharable"),
   }
+  if #members > 1 then
+    local party = {}
+    for _, member in ipairs(members) do
+      party[#party + 1] = ("|c%s%s|r %s"):format(ns.ClassColor(member), member.name, ns.Colorize(ns.Status(id, member)))
+    end
+    lines[#lines + 1] = "|cffaaaaaaParty:|r " .. table.concat(party, "   ")
+  end
+  local objectives = q and q.objectivesText
+  if type(objectives) == "table" and #objectives > 0 then
+    lines[#lines + 1] = "|cffaaaaaaObjectives:|r " .. table.concat(objectives, " ")
+  end
   if not q then
     lines[#lines + 1] = "|cff808080Not in QuestieDB: no prerequisites or follow-ups known.|r"
     return table.concat(lines, "\n")

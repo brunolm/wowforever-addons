@@ -20,9 +20,10 @@ Whenever it isn't known whether a member has already done a quest, their cell sa
 
   Both go where Questie's tracker would: the nearest objective, or the turn-in once the quest is complete. If Questie doesn't know the quest, they fall back to the game's own quest marker. For a quest you don't have, they point to the nearest quest giver. "Only quests I can share" hides the rest.
 - **In progress:** every quest anyone in the party has, with a status for the others.
-- **Completed:** quests not everyone has done, among members whose completed quests are known (you and PartyQuests users). Others show **unknown**. Repeatable quests are merged by name, and "done x3" means done three times.
+- **Party completed:** quests not everyone has done, among members whose completed quests are known (you and PartyQuests users). Others show **unknown**. Repeatable quests are merged by name, and "done x3" means done three times.
+- **My completed:** every quest you've completed, also when you're not in a group, with a column per party member: done, in log, can take, needs prereq, and so on. A member's "done" is known only when they run PartyQuests; with Questie data only it says **unknown**. Repeatable quests are merged by name ("x3" after the name).
 
-Pick a **Zone** (default: all zones), or type in **Search** to match quest or zone names. Hover a status for the reason.
+Pick a **Zone** (default: all zones), or type in **Search** to match quest or zone names. A number searches the quest level: `25`, or a range like `20-25`. Hover a status for the reason.
 
 **Hover a quest name** (here or in the chain window) for its details: zone, level, quest ID, sharable, the status for that member, the **objectives** (with your progress when the quest is in your log, otherwise QuestieDB's summary) and the **rewards**: XP (Questie's estimate for your level), money, items, item choices and reputation. For a quest outside your log the game loads its data on first hover, so rewards can take a moment to appear. Some may never show, since not all reward data is available for quests outside your log.
 
@@ -40,7 +41,9 @@ Pick a **Zone** (default: all zones), or type in **Search** to match quest or zo
 | wrong race / wrong class | Not available to them |
 
 ## Quest chain window
-Click a quest name. The window shows the quests before it (prerequisites and breadcrumbs, farthest first), the quest, and the quests after it. Each card shows the zone, level, quest ID, whether it's sharable, and the status for the character picked under **For**. The lines at the top list what the quest needs, what it leads to, and any quests that rule it out. Click a card to center the chain on that quest.
+Click a quest name in any tab. The window shows the quests before it (prerequisites and breadcrumbs, farthest first), the quest, and the quests after it. Each card shows the zone, level, quest ID, whether it's sharable, and the status for the character picked under **For**. The lines at the top give the status for each party member, the objectives (QuestieDB), what the quest needs, what it leads to, and any quests that rule it out. Click a card to center the chain on that quest.
+
+**Share**, **Track** and **Map** at the top right act on the quest in the center. Share works only for quests in your log (in a group, out of combat). For a quest you don't have, Track and Map point to the quest giver.
 
 ## Commands
 - `/pq` or `/partyquests`: open or close the window.

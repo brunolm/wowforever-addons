@@ -31,6 +31,40 @@ function ns.QuestTooltip(owner, questID, member, hint)
   GameTooltip:Show()
 end
 
+function ns.Tooltip(owner, title, text)
+  GameTooltip:SetOwner(owner, "ANCHOR_RIGHT")
+  GameTooltip:SetText(title or "", 1, 1, 1, 1, true)
+  if text then GameTooltip:AddLine(text, nil, nil, nil, true) end
+  GameTooltip:Show()
+end
+
+-- Tips for the Share / Track / Map buttons: each takes the button (with `.questID`), returns title and text.
+
+--- Why Share is disabled, or who in the party can take the quest.
+function ns.ShareButtonTip(button)
+  local id = button.questID
+  if not ns.OwnLog().active[id] then return "Share", "Only quests in your quest log can be shared." end
+  if ns.IsSharable(id) == false then return "Share", "This quest can't be shared." end
+  if not IsInGroup() then return "Share", "Join a party to share quests." end
+  if InCombatLockdown() then return "Share", "Quests can't be shared in combat." end
+  local lines = {}
+  for i, m in ipairs(ns.Members()) do
+    if i > 1 then
+      lines[#lines + 1] = ("|c%s%s|r: %s"):format(ns.ClassColor(m), m.name, ns.Colorize(ns.ShareStatus(id, m)))
+    end
+  end
+  return "Share with the party", table.concat(lines, "\n")
+end
+
+function ns.TrackButtonTip()
+  if not ns.CanTrack() then return "Track", "Needs the TomTom addon." end
+  return "Track", "TomTom's arrow points to the nearest objective, the turn-in once the quest is complete, or the quest giver for quests you don't have."
+end
+
+function ns.MapButtonTip()
+  return "Show on map", "Opens the world map where the quest takes you: the objective or turn-in for quests in your log, else the quest giver."
+end
+
 --- Runs one part of the tooltip; an error there skips only that part.
 function Section(fn, ...)
   local ok, err = pcall(fn, ...)

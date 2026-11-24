@@ -368,9 +368,14 @@ function ns.Colorize(status)
   return ("|cff%s%s|r"):format(COLORS[status.kind] or COLORS.neutral, status.text)
 end
 
+--- Only quests in the player's own log can be shared, in a group and out of combat.
+function ns.CanShare(id)
+  return ns.OwnLog().active[id] == true and ns.IsSharable(id) ~= false and IsInGroup() and not InCombatLockdown()
+end
+
 --- Shares a quest from the player's log with the party. Blocked in combat.
 function ns.ShareQuest(id)
-  if InCombatLockdown() or not IsInGroup() then return end
+  if not ns.CanShare(id) then return end
   local logIndex = C_QuestLog.GetLogIndexForQuestID(id)
   if not logIndex then return end
   local previous = C_QuestLog.GetSelectedQuest and C_QuestLog.GetSelectedQuest()
